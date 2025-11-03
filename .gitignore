@@ -1,0 +1,17 @@
+# Ignore compiled class files and the output directory
+/out/
+*.class
+
+# Temporary run output
+tmp_run.out
+
+# IDE/editor files
+/.vscode/
+*.iml
+*.idea/
+
+# macOS
+.DS_Store
+
+# Windows thumbnail cache
+Thumbs.db

@@ -25,7 +25,7 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Object> {
 
     @Override
     public Object visitExprStmt(Stmt.Expression stmt) {
-        throw new UnsupportedOperationException("TODO: implement statements");
+        return evaluate(stmt.expr);
     }
 
     @Override
@@ -37,22 +37,44 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Object> {
 
     @Override
     public Void visitVarStmt(Stmt.Var stmt) {
-        throw new UnsupportedOperationException("TODO: implement statements");
+        Object value = null;
+        if (stmt.initializer != null) {
+            value = evaluate(stmt.initializer);
+        }
+        environment.define(stmt.name, stmt.name.lexeme, value);
+        return null;
     }
 
     @Override
     public Object visitBlockStmt(Stmt.Block stmt) {
-        throw new UnsupportedOperationException("TODO: implement statements");
+        Environment previous = this.environment;
+        this.environment = new Environment(previous);
+        try {
+            for (Stmt s : stmt.statements) {
+                s.accept(this);
+            }
+        } finally {
+            this.environment = previous;
+        }
+        return null;
     }
 
     @Override
     public Object visitIfStmt(Stmt.If stmt) {
-        throw new UnsupportedOperationException("TODO: implement statements");
+        if (isTruthy(evaluate(stmt.cond))) {
+            execute(stmt.thenBranch);
+        } else if (stmt.elseBranch != null) {
+            execute(stmt.elseBranch);
+        }
+        return null;
     }
 
     @Override
     public Object visitWhileStmt(Stmt.While stmt) {
-        throw new UnsupportedOperationException("TODO: implement statements");
+        while (isTruthy(evaluate(stmt.cond))) {
+            execute(stmt.body);
+        }
+        return null;
     }
 
     @Override
@@ -62,7 +84,9 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Object> {
 
     @Override
     public Object visitFunctionStmt(Stmt.Function stmt) {
-        throw new UnsupportedOperationException("TODO: implement statements");
+        SimplfFunction function = new SimplfFunction(stmt, environment);
+        environment.define(stmt.name, stmt.name.lexeme, function);
+        return null;
     }
 
     @Override
@@ -155,11 +179,22 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Object> {
 
     @Override
     public Object visitVarExpr(Expr.Variable expr) {
-        throw new UnsupportedOperationException("TODO: implement variable references");
+        return environment.get(expr.name);
     }
     @Override
     public Object visitCallExpr(Expr.Call expr) {
-        throw new UnsupportedOperationException("TODO: implement function calls");
+        Object callee = evaluate(expr.callee);
+        java.util.ArrayList<Object> args = new java.util.ArrayList<>();
+        for (Expr arg : expr.args) {
+            args.add(evaluate(arg));
+        }
+
+        if (!(callee instanceof SimplfCallable)) {
+            throw new RuntimeError(expr.paren, "Can only call functions and lambdas.");
+        }
+
+        SimplfCallable fn = (SimplfCallable) callee;
+        return fn.call(this, args);
     }
 
     private Object evaluate(Expr expr) {
@@ -168,7 +203,9 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Object> {
 
     @Override
     public Object visitAssignExpr(Expr.Assign expr) {
-        throw new UnsupportedOperationException("TODO: implement assignments");
+        Object value = evaluate(expr.value);
+        environment.assign(expr.name, value);
+        return value;
     }
 
     @Override
@@ -227,7 +264,34 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Object> {
 
     @Override
     public Object visitLambda(Lambda expr) {
-        throw new UnsupportedOperationException("TODO: implement variable references");
+        // Create a Function stmt wrapper for the lambda body so we can reuse SimplfFunction
+        java.util.ArrayList<Stmt> body = new java.util.ArrayList<>();
+        body.add(new Stmt.Expression(expr.body));
+        Stmt.Function fake = new Stmt.Function(null, expr.params, body);
+        SimplfFunction fn = new SimplfFunction(fake, environment);
+        return fn;
+    }
+
+    /*
+     * Execute a list of statements in a new environment (used by functions to create closures).
+     * Returns the value of the final expression statement if present; otherwise null.
+     */
+    Object executeBlock(java.util.List<Stmt> statements, Environment env) {
+        Environment previous = this.environment;
+        this.environment = env;
+        try {
+            Object ret = null;
+            for (int i = 0; i < statements.size(); i++) {
+                Stmt s = statements.get(i);
+                Object v = s.accept(this);
+                if (i == statements.size() - 1 && s instanceof Stmt.Expression) {
+                    ret = v;
+                }
+            }
+            return ret;
+        } finally {
+            this.environment = previous;
+        }
     }
 
 
